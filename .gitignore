@@ -4,3 +4,7 @@ __pycache__/
 *.pyc
 models/*.zip
 tensorboard_logs/
+.DS_Store
+archive/
+results/llm_weekly_checkpoint.json
+*.tmp

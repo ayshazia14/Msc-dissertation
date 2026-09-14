@@ -7,12 +7,11 @@ sys.path.insert(0, ROOT_DIR)
 import pandas as pd
 import numpy as np
 from stable_baselines3 import PPO, A2C
-from agents.llm_agent import LLMTradingAgent
 
 from config import INITIAL_AMOUNT, TRANSACTION_COST, INDICATORS
 from finrl.meta.env_stock_trading.env_stocktrading import StockTradingEnv
 
-def train_and_backtest():
+def train_models():
     print('Loading training dataset...')
     train_df = pd.read_csv('data/train_data.csv').sort_values(["date","tic"]).reset_index(drop=True)
     test_df = pd.read_csv('data/test_data.csv').sort_values(["date","tic"]).reset_index(drop=True)
@@ -87,95 +86,10 @@ def train_and_backtest():
     model_a2c.save("models/a2c_finrl_djia")
     print("A2C training finished. Weights saved to models/a2c_finrl_djia.zip")
 
-    '''
-    Phase 2: Backtesting the trained models
-    week 3 of proposal: we will backtest the trained models using the test dataset and evaluate their performance.
-    '''
-    print("\nPhase 2: Backtesting the trained models")
-
-    def backtest_agent(model_class, model_path, agent_name):
-        print(f"Running out-of-sample backtest for {agent_name}")
-        
-        # Initialize environment structures natively
-        raw_test_env = StockTradingEnv(df=test_df, **env_kwargs)
-        sb_test_env, _ = raw_test_env.get_sb_env()
-        model = model_class.load(model_path, env=sb_test_env)
-
-        # Reset the raw environment and safely extract the initial observation array
-        reset_output = raw_test_env.reset()
-        obs = reset_output[0] if isinstance(reset_output, tuple) else reset_output
-        
-        done = False
-        while not done:
-            action, _states = model.predict(obs, deterministic=True)
-            
-            # Step directly on the raw environment to prevent auto-reset wiping out data
-            step_output = raw_test_env.step(action)
-            
-            # Accommodate both 4-value (legacy Gym) and 5-value (modern Gym/Gymnasium) returns
-            if len(step_output) == 5:
-                obs, reward, terminated, truncated, info = step_output
-                done = terminated or truncated
-            else:
-                obs, reward, done, info = step_output
-
-        # Extract history logs from the raw environment before it gets touched
-        df_account_value = raw_test_env.save_asset_memory()
-        df_actions = raw_test_env.save_action_memory()
-        
-        return df_account_value, df_actions
-    
-    def backtest_llm_agent(agent_name="LLM_GPT4o"):
-        print(f"\nRunning out-of-sample backtest for {agent_name}")
-        
-        raw_test_env = StockTradingEnv(df=test_df, **env_kwargs)
-        llm_agent = LLMTradingAgent(model_name="gpt-4o-mini")
-        
-        reset_output = raw_test_env.reset()
-        obs = reset_output[0] if isinstance(reset_output, tuple) else reset_output
-        done = False
-        
-        unique_dates = sorted(test_df['date'].unique())
-        step_idx = 0
-        
-        while not done and step_idx < len(unique_dates):
-            current_date = unique_dates[step_idx]
-            day_market_data = test_df[test_df['date'] == current_date]
-            
-            action = llm_agent.generate_portfolio_actions(current_date, day_market_data)
-
-            action_np = np.array(action, dtype=np.float32)
-            step_output = raw_test_env.step(action_np)
-            
-            if len(step_output) == 5:
-                obs, reward, terminated, truncated, info = step_output
-                done = terminated or truncated
-            else:
-                obs, reward, done, info = step_output
-                
-            step_idx += 1
-            if step_idx % 10 == 0:
-                print(f"Processed {step_idx}/{len(unique_dates)} days for LLM...")
-
-        df_account_value = raw_test_env.save_asset_memory()
-        df_actions = raw_test_env.save_action_memory()
-        return df_account_value, df_actions
-    
-    ppo_equity, ppo_actions = backtest_agent(PPO, "models/ppo_finrl_djia", "PPO")
-    a2c_equity, a2c_actions = backtest_agent(A2C, "models/a2c_finrl_djia", "A2C")
-    
-    llm_equity, llm_actions = backtest_llm_agent("GPT-4o-Mini")
-
-    ppo_equity.to_csv("results/ppo_test_equity_curve.csv", index=False)
-    a2c_equity.to_csv("results/a2c_test_equity_curve.csv", index=False)
-    ppo_actions.to_csv("results/ppo_test_actions.csv", index=False)
-    a2c_actions.to_csv("results/a2c_test_actions.csv", index=False)
-    
-    llm_equity.to_csv("results/llm_test_equity_curve.csv", index=False)
-    llm_actions.to_csv("results/llm_test_actions.csv", index=False)
-
-    print("\nBacktesting completed. Results saved to 'results' directory.")
+    print("\nTraining completed. Run "
+          "python agents/backtest_drl_weekly.py "
+          "for the final five-day-cadence evaluation.")
 
 if __name__ == "__main__":
-    print("Initializing DRL Training and Backtesting Pipeline...")
-    train_and_backtest()
+    print("Initializing DRL Training Pipeline...")
+    train_models()
